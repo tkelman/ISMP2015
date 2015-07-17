@@ -1,3 +1,5 @@
+# This problem is borrowed from https://github.com/JuliaOpt/JuliaCon-2015/blob/64e0d2d61176fc71f6a267439b497545e6d80f18/Rocket%20Control%20with%20JuMP%20-%20JuliaCon%202015.ipynb
+
 using JuMP, Ipopt, AmplNLWriter, CoinOptServices
 function rocket()
 for mod in (Model(solver=IpoptSolver(print_timing_statistics="yes")),
