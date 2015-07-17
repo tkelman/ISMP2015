@@ -1,0 +1,13 @@
+Calling nonlinear and MINLP solvers from Julia:
+interfaces, formats, expression trees and AD tools
+
+While canonical interfaces for LP's are largely standardized across different
+solvers and programming languages, this is not the case for nonlinear or
+mixed-integer nonlinear optimization. Two existing tools in this area are the
+AMPL Solver Library and the COIN-OR Optimization Services project. We will
+discuss technical challenges and performance tradeoffs in using these tools
+from the Julia language, which is uniquely able to be simultaneously
+high-level, high-performance, user-friendly, and provide efficient interfaces
+to widely used optimization libraries. The JuliaOpt organization and the
+MathProgBase set of protocols present new levels of interoperability between
+solvers and different styles of optimization modeling environments.

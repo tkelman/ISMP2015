@@ -1,0 +1,879 @@
+\documentclass[compressed,dvips,letter]{beamer}
+
+\mode<presentation>
+{
+  \usetheme{Boadilla}
+  \setbeamercovered{dynamic}
+}
+
+\input{talk-preamble}
+\usepackage{array}
+\usepackage{subfigure}
+\usepackage{multirow}
+\usepackage{arydshln}
+\usepackage{verbatim}
+\usepackage{graphicx}
+\usepackage{amsmath}
+%\usepackage{url}
+\usepackage{hyperref}
+\usepackage{breakurl}
+%\usepackage{pdfpages}
+
+\makeatletter
+\newcommand{\verbatimfont}[1]{\def\verbatim@font{#1}}%
+\makeatother
+
+\setbeamertemplate{navigation symbols}{}
+\setlength{\TPHorizModule}{1cm}
+\setlength{\TPVertModule}{1cm}
+
+
+\usefonttheme{professionalfonts}
+\title[Calling MINLP solvers from Julia]
+{Calling nonlinear and MINLP solvers from Julia\\
+\vspace{5pt}
+\small Interfaces, formats, expression trees and AD tools
+\vspace{-10pt}}
+
+\author{Tony Kelman}
+
+\institute[UC Berkeley]
+{
+  University of California, Berkeley \\
+  
+  \vspace{5pt}
+  {\fontfamily{pcr}\selectfont kelman@berkeley.edu} \\
+
+  \vspace{5pt}
+  \url{https://github.com/tkelman}
+}
+\date[ISMP, July 16 2015]{\includegraphics[width=85pt]{fig/juliaopt_logo.eps}
+\\ISMP, Pittburgh PA\\July 16, 2015}
+
+\subject{}
+
+
+\begin{document}
+\verbatimfont{\fontfamily{pcr}\selectfont}
+%\setbeamertemplate{blocks}[rounded][shadow=true]
+
+\setbeamertemplate{footline}{}
+\begin{frame}
+  \titlepage
+\end{frame}
+
+
+%
+%===========================================================================================
+%
+\setcounter{framenumber}{0}
+\setbeamertemplate{footline}[infolines theme]
+
+
+
+\begin{frame}[fragile]\frametitle{In the spirit of reproducible research}
+
+You can get to solving a (small) MINLP before the end of this talk
+\footnote{On Mac or Windows, where we download precompiled solver binaries \\
+~~~~ On Linux, has to compile solvers from source which takes a few minutes}
+
+  \begin{enumerate}
+    \item Install a binary of the latest Julia release at \\
+      \url{http://julialang.org/downloads}
+    \item Open a Julia session and run: \\
+      \texttt{Pkg.add("JuMP") \\
+      Pkg.add("CoinOptServices") \\
+      using JuMP, CoinOptServices, Compat \\
+      include(Pkg.dir("JuMP","test","solvers.jl")); \\
+      include(Pkg.dir("JuMP","test","nonlinear.jl"));}
+  \end{enumerate}
+
+Will come back to an example problem later
+
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+
+\begin{frame}[fragile]\frametitle{Talk outline}
+\begin{itemize}
+  \item MINLP problem statement, standard form
+  \item Expression trees
+  \item Automatic differentiation
+  \item Solver interfaces
+  \begin{itemize}
+    \item Data formats, COIN OSiL and AMPL nl
+    \item APIs, connecting to high level languages
+  \end{itemize}
+  \item Julia implementations
+  \begin{itemize}
+    \item JuMP and MathProgBase
+    \item CoinOptServices and AmplNLWriter
+  \end{itemize}
+  \item Example problems
+  \item Performance evaluation
+\end{itemize}
+
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+
+\begin{frame}[fragile]\frametitle{Mixed integer nonlinear programming}
+
+\begin{block}{\center MINLP problem statement}
+\vspace{-15pt}
+\begin{align*}
+\min_x ~ & f(x) \\
+\text{s.t.} ~ & g(x) \leq 0 \\
+& h(x) = 0 \\
+& x \in \mathbb{R}^n \\
+& x_i \in \mathbb{Z} ~ \forall ~ i \in \mathcal{I}
+\end{align*}
+\end{block}
+
+\begin{itemize}
+  \item For this talk $f(x)$, $g(x)$ may be non-convex, $h(x)$ may be nonlinear
+  \item Assume that $f(x), g(x), h(x)$ are algebraic expressions
+  \item What is the ``standard form" to encode this problem?
+\end{itemize}
+
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+
+
+\begin{frame}[fragile]\frametitle{Expression trees}
+\vspace{-15pt}
+\begin{minipage}{0.55\textwidth}
+\begin{figure}
+\includegraphics[width=135pt]{fig/expr_tree.eps}
+\end{figure}
+
+Julia has a first-class expression type and quote operator,
+it already does exactly what we want here \\
+
+Real macros and metaprogramming ({\fontfamily{pcr}\selectfont @addNLConstraint} in JuMP) take much of the work out of this
+
+\end{minipage}
+\begin{minipage}{0.35\textwidth}
+{\fontsize{6.8pt}{0} \selectfont
+\begin{verbatim}
+julia> dump(:( 2*3/(2-1)+5*(4-1) ), 6)
+Expr
+  head: Symbol call
+  args: Array(Any,(3,))
+    1: Symbol +
+    2: Expr
+      head: Symbol call
+      args: Array(Any,(3,))
+        1: Symbol /
+        2: Expr
+          head: Symbol call
+          args: Array(Any,(3,))
+            1: Symbol *
+            2: Int64 2
+            3: Int64 3
+          typ: Any
+        3: Expr
+          head: Symbol call
+          args: Array(Any,(3,))
+            1: Symbol -
+            2: Int64 2
+            3: Int64 1
+          typ: Any
+      typ: Any
+    3: Expr
+      head: Symbol call
+      args: Array(Any,(3,))
+        1: Symbol *
+        2: Int64 5
+        3: Expr
+          head: Symbol call
+          args: Array(Any,(3,))
+            1: Symbol -
+            2: Int64 4
+            3: Int64 1
+          typ: Any
+      typ: Any
+  typ: Any
+\end{verbatim}
+}
+\end{minipage}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+\begin{frame}[fragile]\frametitle{Automatic (algorithmic) differentiation}
+
+\begin{itemize}
+\item Large body of literature and implementations (ADOL-C, CppAD, AMPL ASL, ReverseDiffSparse.jl, etc), see \url{http://www.mit.edu/~mlubin/informs2014-nlp.pdf} for more details
+\item Given expression trees of objective and constraint functions $f(x), g(x), h(x)$, AD provides efficient calculation method for sparse constraint Jacobian and Lagrangian Hessian
+\item For general nonlinear problems that don't fit in a special form, you should be using AD unless you have a good reason not to
+\end{itemize}
+
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+
+\begin{frame}[fragile]\frametitle{Data formats for representing expression trees}
+
+\begin{itemize}
+\item State of the art in practice: AMPL .nl format, see ``Hooking Your Solver to AMPL" and ``Writing .nl Files" technical reports by David M. Gay
+\item High level human-readable .mod file converted to low level expression tree .nl format by proprietary AMPL modeling layer
+\item Solvers link to open-source AMPL solver library (ASL) for function, Jacobian, Hessian evaluation from .nl file
+\item Now available in Julia thanks to Jack Dunn's AmplNLWriter.jl package, JuMP can create .nl files
+\end{itemize}
+
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+\begin{frame}[fragile]\frametitle{Creating a .nl file from JuMP}
+Copy-paste from \url{http://bit.do/ismp-minlp}
+{\fontsize{8.8pt}{0} \selectfont
+\begin{verbatim}
+Pkg.add("AmplNLWriter")
+using JuMP, AmplNLWriter
+# Solve test problem 1 (Synthesis of processing system) in
+# M. Duran & I.E. Grossmann, "An outer approximation algorithm for
+# a class of mixed integer nonlinear programs", Mathematical
+# Programming 36, pp. 307-339, 1986.
+m = Model(solver = BonminNLSolver())
+x_U = [2,2,1]
+@defVar(m, x_U[i] >= x[i=1:3] >= 0)
+@defVar(m, y[4:6], Bin)
+@setNLObjective(m, Min, 10 + 10*x[1] - 7*x[3] + 5*y[4] + 6*y[5] +
+    8*y[6] - 18*log(x[2]+1) - 19.2*log(x[1]-x[2]+1))
+@addNLConstraints(m, begin
+    0.8*log(x[2] + 1) + 0.96*log(x[1] - x[2] + 1) - 0.8*x[3] >= 0
+    log(x[2] + 1) + 1.2*log(x[1] - x[2] + 1) - x[3] - 2*y[6] >= -2
+    x[2] - x[1] <= 0
+    x[2] - 2*y[4] <= 0
+    x[1] - x[2] - 2*y[5] <= 0
+    y[4] + y[5] <= 1
+end)
+status = solve(m)
+\end{verbatim}
+}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+\begin{frame}[fragile]\frametitle{The resulting .nl file}
+\begin{minipage}{0.35\textwidth}
+{\fontsize{6.8pt}{0} \selectfont
+\begin{verbatim}
+g3 1 1 0
+ 6 6 1 6 0 0
+ 2 1
+ 0 0
+ 2 2 2
+ 0 0 0 0
+ 3 0 0 0 0
+ 16 6
+ 0 0
+ 0 0 0 0 0
+C0
+o0
+o2
+n0.8
+o43
+o0
+v1
+n1
+o2
+n0.96
+o43
+o0
+o1
+v0
+v1
+n1
+C1
+o0
+o43
+o0
+v1
+n1
+o2
+n1.2
+o43
+o0
+o1
+v0
+v1
+n1
+C2
+n0
+C3
+n0
+\end{verbatim}
+}
+\end{minipage}
+\begin{minipage}{0.35\textwidth}
+{\fontsize{6.8pt}{0} \selectfont
+\begin{verbatim}
+C4
+n0
+C5
+n0
+O0 0
+o0
+o1
+o16
+o2
+n18
+o43
+o0
+v1
+n1
+o2
+n19.2
+o43
+o0
+o1
+v0
+v1
+n1
+n10
+d6
+0 0
+1 0
+2 0
+3 0
+4 0
+5 0
+x6
+0 0.0
+1 0.0
+2 0.0
+3 0.0
+4 0.0
+5 0.0
+r
+2 0.0
+2 -2.0
+1 0.0
+1 0.0
+1 0.0
+1 1.0
+\end{verbatim}
+}
+\end{minipage}
+\begin{minipage}{0.25\textwidth}
+{\fontsize{6.8pt}{0} \selectfont
+\begin{verbatim}
+b
+0 0.0 2.0
+0 0.0 2.0
+0 0.0 1.0
+0 0.0 1.0
+0 0.0 1.0
+0 0.0 1.0
+k5
+4
+9
+11
+13
+15
+J0 3
+0 0.0
+1 0.0
+2 -0.8
+J1 4
+0 0.0
+1 0.0
+2 -1.0
+5 -2.0
+J2 2
+0 -1.0
+1 1.0
+J3 2
+1 1.0
+3 -2.0
+J4 3
+0 1.0
+1 -1.0
+4 -2.0
+J5 2
+3 1.0
+4 1.0
+G0 6
+0 10.0
+1 0.0
+2 -7.0
+3 5.0
+4 6.0
+5 8.0
+\end{verbatim}
+}
+\end{minipage}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+\begin{frame}\frametitle{COIN-OR solvers and Optimization Services}
+\begin{tabular}{m{3.0in} m{2in}}
+\begin{itemize}
+\item Comprehensive stack of cutting-edge \\
+open source solvers and libraries
+\item CLP: continuous linear programming
+\item CBC: mixed-integer linear programming
+\item Ipopt: continuous nonlinear programming
+\item Bonmin: evaluation based mixed-integer nonlinear programming
+\item Couenne: expression tree based mixed-integer nonlinear programming
+\item CppAD: automatic differentiation
+\item Optimization Services: standardized interchange formats,
+remote solution protocols, solver-independent interfaces
+\end{itemize}
+&
+\includegraphics[width=1.1in]{./fig/COIN-OR.eps}
+\vspace{100pt}
+\end{tabular}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+
+\begin{frame}[fragile]\frametitle{Optimization Services OSiL format - 1}
+\begin{itemize}
+\item XML based, human readable
+\item \texttt{OSSolverService} driver uses CppAD for Jacobian, Hessian
+\item Same Julia code, except for: \\
+{\footnotesize
+\texttt{using CoinOptServices \\
+m = Model(solver = OsilBonminSolver())}}
+\end{itemize}
+{\fontsize{6pt}{0} \selectfont
+\begin{verbatim}
+<?xml version="1.0" encoding="utf-8"?>
+<osil xmlns="os.optimizationservices.org"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="os.optimizationservices.org
+    http://www.optimizationservices.org/schemas/2.0/OSiL.xsd">
+  <instanceHeader>
+    <description>generated by CoinOptServices.jl</description>
+  </instanceHeader>
+  <instanceData>
+    <variables numberOfVariables="6">
+      <var lb="0.0" ub="2.0" type="C"/>
+      <var lb="0.0" ub="2.0" type="C"/>
+      <var lb="0.0" ub="1.0" type="C"/>
+      <var lb="0.0" ub="1.0" type="B"/>
+      <var lb="0.0" ub="1.0" type="B"/>
+      <var lb="0.0" ub="1.0" type="B"/>
+    </variables>
+    <objectives numberOfObjectives="1">
+      <obj maxOrMin="min" numberOfObjCoef="0"/>
+    </objectives>
+    <constraints numberOfConstraints="6">
+      <con lb="0.0"/>
+      <con lb="0.0"/>
+      <con ub="0.0"/>
+      <con ub="0.0"/>
+      <con ub="0.0"/>
+      <con ub="0.0"/>
+    </constraints>
+\end{verbatim}
+}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+\begin{frame}[fragile]\frametitle{Optimization Services OSiL format - 2}
+\begin{minipage}{0.54\textwidth}
+{\fontsize{6pt}{0} \selectfont
+\begin{verbatim}
+<nonlinearExpressions numberOfNonlinearExpressions="7">
+  <nl idx="-1">
+    <minus>
+      <minus>
+        <sum>
+          <minus>
+            <plus>
+              <number value="10"/>
+              <variable idx="0" coef="10"/>
+            </plus>
+            <variable idx="2" coef="7"/>
+          </minus>
+          <variable idx="3" coef="5"/>
+          <variable idx="4" coef="6"/>
+          <variable idx="5" coef="8"/>
+        </sum>
+        <times>
+          <number value="18"/>
+          <ln>
+            <plus>
+              <variable idx="1"/>
+              <number value="1"/>
+            </plus>
+          </ln>
+        </times>
+      </minus>
+      <times>
+        <number value="19.2"/>
+        <ln>
+          <plus>
+            <minus>
+              <variable idx="0"/>
+              <variable idx="1"/>
+            </minus>
+            <number value="1"/>
+          </plus>
+        </ln>
+      </times>
+    </minus>
+  </nl>
+\end{verbatim}
+}
+\end{minipage}
+\begin{minipage}{0.42\textwidth}
+{\fontsize{6pt}{0} \selectfont
+\begin{verbatim}
+      <nl idx="0">
+        <minus>
+          <minus>
+            <plus>
+              <times>
+                <number value="0.8"/>
+                <ln>
+                  <plus>
+                    <variable idx="1"/>
+                    <number value="1"/>
+                  </plus>
+                </ln>
+              </times>
+              <times>
+                <number value="0.96"/>
+                <ln>
+                  <plus>
+                    <minus>
+                      <variable idx="0"/>
+                      <variable idx="1"/>
+                    </minus>
+                    <number value="1"/>
+                  </plus>
+                </ln>
+              </times>
+            </plus>
+            <variable idx="2" coef="0.8"/>
+          </minus>
+          <number value="0"/>
+        </minus>
+      </nl>
+\end{verbatim}
+}
+\end{minipage}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+\begin{frame}[fragile]\frametitle{Optimization Services OSiL format - 3}
+\begin{minipage}{0.54\textwidth}
+{\fontsize{6pt}{0} \selectfont
+\begin{verbatim}
+  <nl idx="1">
+    <minus>
+      <minus>
+        <minus>
+          <plus>
+            <ln>
+              <plus>
+                <variable idx="1"/>
+                <number value="1"/>
+              </plus>
+            </ln>
+            <times>
+              <number value="1.2"/>
+              <ln>
+                <plus>
+                  <minus>
+                    <variable idx="0"/>
+                    <variable idx="1"/>
+                  </minus>
+                  <number value="1"/>
+                </plus>
+              </ln>
+            </times>
+          </plus>
+          <variable idx="2"/>
+        </minus>
+        <variable idx="5" coef="2"/>
+      </minus>
+      <number value="-2"/>
+    </minus>
+  </nl>
+  <nl idx="2">
+    <minus>
+      <minus>
+        <variable idx="1"/>
+        <variable idx="0"/>
+      </minus>
+      <number value="0"/>
+    </minus>
+  </nl>
+\end{verbatim}
+}
+\end{minipage}
+\begin{minipage}{0.42\textwidth}
+{\fontsize{6pt}{0} \selectfont
+\begin{verbatim}
+      <nl idx="3">
+        <minus>
+          <minus>
+            <variable idx="1"/>
+            <variable idx="3" coef="2"/>
+          </minus>
+          <number value="0"/>
+        </minus>
+      </nl>
+      <nl idx="4">
+        <minus>
+          <minus>
+            <minus>
+              <variable idx="0"/>
+              <variable idx="1"/>
+            </minus>
+            <variable idx="4" coef="2"/>
+          </minus>
+          <number value="0"/>
+        </minus>
+      </nl>
+      <nl idx="5">
+        <minus>
+          <plus>
+            <variable idx="3"/>
+            <variable idx="4"/>
+          </plus>
+          <number value="1"/>
+        </minus>
+      </nl>
+    </nonlinearExpressions>
+  </instanceData>
+</osil>
+\end{verbatim}
+}
+\end{minipage}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+
+\begin{frame}[fragile]\frametitle{Solver APIs and connecting to high level languages}
+\begin{itemize}
+\item Convenient for users to work in high level languages for model formulation, data processing, function evaluation (if fast enough)
+\item Modern solvers in \texttt{C++} are hard to use from other languages unless they have a dedicated \texttt{C} API
+\begin{itemize}
+\item e.g. Bonmin doesn't need expression trees, but only has a \texttt{C++} API
+\item Julia solver interfaces very easy when there is a \texttt{C} API: \texttt{ccall((function\_name, library\_name), return\_type, (input\_types,), inputs)}
+\item Direct Julia to \texttt{C++} interface being worked on, but still unstable
+\end{itemize}
+\onslide<2->{\item Julia is both fast and high level, convenient for developers too
+\begin{itemize}
+\item No need to prototype in Matlab/Python then rewrite in \texttt{C}/\texttt{C++} for performance
+\item Pure-Julia AD in ReverseDiffSparse.jl is fast enough that it's not the bottleneck
+\item Can stay in memory, avoid .nl or .osil files, allow efficient re-solves
+\item Solvers entirely in Julia? Very little code to connect to MathProgBase, JuMP, Convex.jl
+\end{itemize}}
+\end{itemize}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+\begin{frame}[fragile]\frametitle{MathProgBase extensibility and new solvers}
+\begin{center}
+\includegraphics[width=150pt]{fig/mathprogbase.eps}
+\end{center}
+\vspace{-15pt}
+\begin{itemize}
+\item Unified Julia API for all solver packages and modeling tools to talk to
+\item Solvers call \texttt{eval\_jac\_g} to evaluate constraint Jacobian
+\item AmplNLWriter and CoinOptServices call \texttt{obj\_expr}, \texttt{constr\_expr} to get Julia expression trees for objective and constraint functions
+\item More solvers, more modeling environments (AmplNLReader.jl), extensions of JuMP and Convex.jl
+\end{itemize}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+
+\begin{frame}[fragile]\frametitle{Larger example problem}
+\begin{itemize}
+\item Goddard rocket control problem from COPS3 (continuous NLP)
+\url{http://bit.do/rocket-jump}
+\item Comparing AD function evaluation performance between
+\begin{enumerate}
+\item Pure-Julia ReverseDiffSparse.jl: {\footnotesize \texttt{solver=IpoptSolver(print\_timing\_statistics="yes")}}
+\item ASL via nl: {\footnotesize \texttt{solver=IpoptNLSolver()}}
+\item CppAD via osil: {\footnotesize \texttt{solver=OsilSolver(OSOption("print\_timing\_statistics", "yes"))}}
+\end{enumerate}
+\end{itemize}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+\begin{frame}[fragile]\frametitle{Pure-Julia AD}
+{\footnotesize \texttt{solver=IpoptSolver(print\_timing\_statistics="yes")}}
+{\fontsize{6pt}{0} \selectfont
+\begin{verbatim}
+Total CPU secs in IPOPT (w/o function evaluations)   =      0.719
+Total CPU secs in NLP function evaluations           =      0.412
+                                                                                                       ~
+                                                                                                       ~
+Timing Statistics:
+                                                                                                       ~
+OverallAlgorithm....................:      1.131 (sys:      0.000 wall:      1.131)
+ PrintProblemStatistics.............:      0.021 (sys:      0.000 wall:      0.021)
+ InitializeIterates.................:      0.101 (sys:      0.000 wall:      0.101)
+ UpdateHessian......................:      0.317 (sys:      0.000 wall:      0.317)
+ OutputIteration....................:      0.138 (sys:      0.000 wall:      0.138)
+ UpdateBarrierParameter.............:      0.003 (sys:      0.000 wall:      0.003)
+ ComputeSearchDirection.............:      0.418 (sys:      0.000 wall:      0.418)
+ ComputeAcceptableTrialPoint........:      0.040 (sys:      0.000 wall:      0.040)
+ AcceptTrialPoint...................:      0.000 (sys:      0.000 wall:      0.000)
+ CheckConvergence...................:      0.071 (sys:      0.000 wall:      0.071)
+PDSystemSolverTotal.................:      0.417 (sys:      0.000 wall:      0.417)
+ PDSystemSolverSolveOnce............:      0.396 (sys:      0.000 wall:      0.396)
+ ComputeResiduals...................:      0.018 (sys:      0.000 wall:      0.018)
+ StdAugSystemSolverMultiSolve.......:      0.445 (sys:      0.000 wall:      0.445)
+ LinearSystemScaling................:      0.000 (sys:      0.000 wall:      0.000)
+ LinearSystemSymbolicFactorization..:      0.044 (sys:      0.000 wall:      0.044)
+ LinearSystemFactorization..........:      0.000 (sys:      0.000 wall:      0.000)
+ LinearSystemBackSolve..............:      0.058 (sys:      0.000 wall:      0.058)
+ LinearSystemStructureConverter.....:      0.000 (sys:      0.000 wall:      0.000)
+  LinearSystemStructureConverterInit:      0.000 (sys:      0.000 wall:      0.000)
+Function Evaluations................:      0.412 (sys:      0.000 wall:      0.412)
+ Objective function.................:      0.000 (sys:      0.000 wall:      0.000)
+ Objective function gradient........:      0.000 (sys:      0.000 wall:      0.000)
+ Equality constraints...............:      0.024 (sys:      0.000 wall:      0.024)
+ Inequality constraints.............:      0.000 (sys:      0.000 wall:      0.000)
+ Equality constraint Jacobian.......:      0.072 (sys:      0.000 wall:      0.072)
+ Inequality constraint Jacobian.....:      0.000 (sys:      0.000 wall:      0.000)
+ Lagrangian Hessian.................:      0.316 (sys:      0.000 wall:      0.316)
+\end{verbatim}
+}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+
+\begin{frame}[fragile]\frametitle{ASL via nl}
+{\footnotesize \texttt{solver=IpoptNLSolver()}}
+{\fontsize{6pt}{0} \selectfont
+\begin{verbatim}
+Total CPU secs in IPOPT (w/o function evaluations)   =      0.732
+Total CPU secs in NLP function evaluations           =      0.244
+                                                                                                       ~
+                                                                                                       ~
+Timing Statistics:
+                                                                                                       ~
+OverallAlgorithm....................:      0.976 (sys:      0.000 wall:      0.976)
+ PrintProblemStatistics.............:      0.021 (sys:      0.000 wall:      0.021)
+ InitializeIterates.................:      0.055 (sys:      0.000 wall:      0.055)
+ UpdateHessian......................:      0.174 (sys:      0.000 wall:      0.175)
+ OutputIteration....................:      0.139 (sys:      0.000 wall:      0.139)
+ UpdateBarrierParameter.............:      0.001 (sys:      0.000 wall:      0.001)
+ ComputeSearchDirection.............:      0.470 (sys:      0.000 wall:      0.470)
+ ComputeAcceptableTrialPoint........:      0.057 (sys:      0.000 wall:      0.057)
+ AcceptTrialPoint...................:      0.000 (sys:      0.000 wall:      0.000)
+ CheckConvergence...................:      0.032 (sys:      0.000 wall:      0.032)
+PDSystemSolverTotal.................:      0.470 (sys:      0.000 wall:      0.470)
+ PDSystemSolverSolveOnce............:      0.454 (sys:      0.000 wall:      0.454)
+ ComputeResiduals...................:      0.011 (sys:      0.000 wall:      0.011)
+ StdAugSystemSolverMultiSolve.......:      0.483 (sys:      0.000 wall:      0.483)
+ LinearSystemScaling................:      0.000 (sys:      0.000 wall:      0.000)
+ LinearSystemSymbolicFactorization..:      0.026 (sys:      0.000 wall:      0.026)
+ LinearSystemFactorization..........:      0.000 (sys:      0.000 wall:      0.000)
+ LinearSystemBackSolve..............:      0.058 (sys:      0.000 wall:      0.058)
+ LinearSystemStructureConverter.....:      0.000 (sys:      0.000 wall:      0.000)
+  LinearSystemStructureConverterInit:      0.000 (sys:      0.000 wall:      0.000)
+Function Evaluations................:      0.244 (sys:      0.000 wall:      0.244)
+ Objective function.................:      0.000 (sys:      0.000 wall:      0.000)
+ Objective function gradient........:      0.003 (sys:      0.000 wall:      0.003)
+ Equality constraints...............:      0.039 (sys:      0.000 wall:      0.039)
+ Inequality constraints.............:      0.000 (sys:      0.000 wall:      0.000)
+ Equality constraint Jacobian.......:      0.028 (sys:      0.000 wall:      0.028)
+ Inequality constraint Jacobian.....:      0.000 (sys:      0.000 wall:      0.000)
+ Lagrangian Hessian.................:      0.174 (sys:      0.000 wall:      0.174)
+\end{verbatim}
+}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+
+\begin{frame}[fragile]\frametitle{CppAD via osil}
+{\footnotesize \texttt{solver=OsilSolver(OSOption("print\_timing\_statistics", "yes"))}}
+\begin{center}
+\includegraphics[width=120pt]{fig/bug.eps}
+\end{center}
+\vspace{-15pt}
+\begin{itemize}
+\item Failed to converge, initial conditions not set right by \texttt{OSSolverService}
+\item Function evaluation time several hundred times slower per iteration
+\item Interesting disagreeement on ``Number of nonzeros in Lagrangian Hessian" for same problem
+\begin{enumerate}
+\item ReverseDiffSparse.jl: 48800
+\item ASL: 11214
+\item OSSolverService: 8811
+\end{enumerate}
+\end{itemize}
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+
+\begin{frame}[fragile]\frametitle{Conclusions}
+\begin{itemize}
+  \item There are some bugs in Optimization Services, need to report them along with .nl and .osil test files, and spend some time profiling in \texttt{C++}
+  \item Only a few hundred lines of Julia code to implement expression tree to .osil (or .nl) conversion
+  \item For now use CoinOptServices to install Bonmin and Couenne solver binaries, AmplNLWriter for MINLP's, and either AmplNLWriter or in-memory interfaces for continuous NLP's
+  \item Want advice on writing Julia bindings to your solver, or how to start prototyping algorithms in Julia? {\footnotesize \fontfamily{pcr}\selectfont julia-opt@googlegroups.com}
+\end{itemize}
+
+\end{frame}
+%
+%--------------------------------------------------------------
+%
+
+
+
+\end{document}

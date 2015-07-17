@@ -1,0 +1,80 @@
+solver=IpoptSolver(print_timing_statistics="yes")
+
+Total CPU secs in IPOPT (w/o function evaluations)   =      0.719
+Total CPU secs in NLP function evaluations           =      0.412
+
+
+Timing Statistics:
+
+OverallAlgorithm....................:      1.131 (sys:      0.000 wall:      1.131)
+ PrintProblemStatistics.............:      0.021 (sys:      0.000 wall:      0.021)
+ InitializeIterates.................:      0.101 (sys:      0.000 wall:      0.101)
+ UpdateHessian......................:      0.317 (sys:      0.000 wall:      0.317)
+ OutputIteration....................:      0.138 (sys:      0.000 wall:      0.138)
+ UpdateBarrierParameter.............:      0.003 (sys:      0.000 wall:      0.003)
+ ComputeSearchDirection.............:      0.418 (sys:      0.000 wall:      0.418)
+ ComputeAcceptableTrialPoint........:      0.040 (sys:      0.000 wall:      0.040)
+ AcceptTrialPoint...................:      0.000 (sys:      0.000 wall:      0.000)
+ CheckConvergence...................:      0.071 (sys:      0.000 wall:      0.071)
+PDSystemSolverTotal.................:      0.417 (sys:      0.000 wall:      0.417)
+ PDSystemSolverSolveOnce............:      0.396 (sys:      0.000 wall:      0.396)
+ ComputeResiduals...................:      0.018 (sys:      0.000 wall:      0.018)
+ StdAugSystemSolverMultiSolve.......:      0.445 (sys:      0.000 wall:      0.445)
+ LinearSystemScaling................:      0.000 (sys:      0.000 wall:      0.000)
+ LinearSystemSymbolicFactorization..:      0.044 (sys:      0.000 wall:      0.044)
+ LinearSystemFactorization..........:      0.000 (sys:      0.000 wall:      0.000)
+ LinearSystemBackSolve..............:      0.058 (sys:      0.000 wall:      0.058)
+ LinearSystemStructureConverter.....:      0.000 (sys:      0.000 wall:      0.000)
+  LinearSystemStructureConverterInit:      0.000 (sys:      0.000 wall:      0.000)
+Function Evaluations................:      0.412 (sys:      0.000 wall:      0.412)
+ Objective function.................:      0.000 (sys:      0.000 wall:      0.000)
+ Objective function gradient........:      0.000 (sys:      0.000 wall:      0.000)
+ Equality constraints...............:      0.024 (sys:      0.000 wall:      0.024)
+ Inequality constraints.............:      0.000 (sys:      0.000 wall:      0.000)
+ Equality constraint Jacobian.......:      0.072 (sys:      0.000 wall:      0.072)
+ Inequality constraint Jacobian.....:      0.000 (sys:      0.000 wall:      0.000)
+ Lagrangian Hessian.................:      0.316 (sys:      0.000 wall:      0.316)
+
+
+
+
+solver=IpoptNLSolver()
+
+Total CPU secs in IPOPT (w/o function evaluations)   =      0.732
+Total CPU secs in NLP function evaluations           =      0.244
+
+
+Timing Statistics:
+
+OverallAlgorithm....................:      0.976 (sys:      0.000 wall:      0.976)
+ PrintProblemStatistics.............:      0.021 (sys:      0.000 wall:      0.021)
+ InitializeIterates.................:      0.055 (sys:      0.000 wall:      0.055)
+ UpdateHessian......................:      0.174 (sys:      0.000 wall:      0.175)
+ OutputIteration....................:      0.139 (sys:      0.000 wall:      0.139)
+ UpdateBarrierParameter.............:      0.001 (sys:      0.000 wall:      0.001)
+ ComputeSearchDirection.............:      0.470 (sys:      0.000 wall:      0.470)
+ ComputeAcceptableTrialPoint........:      0.057 (sys:      0.000 wall:      0.057)
+ AcceptTrialPoint...................:      0.000 (sys:      0.000 wall:      0.000)
+ CheckConvergence...................:      0.032 (sys:      0.000 wall:      0.032)
+PDSystemSolverTotal.................:      0.470 (sys:      0.000 wall:      0.470)
+ PDSystemSolverSolveOnce............:      0.454 (sys:      0.000 wall:      0.454)
+ ComputeResiduals...................:      0.011 (sys:      0.000 wall:      0.011)
+ StdAugSystemSolverMultiSolve.......:      0.483 (sys:      0.000 wall:      0.483)
+ LinearSystemScaling................:      0.000 (sys:      0.000 wall:      0.000)
+ LinearSystemSymbolicFactorization..:      0.026 (sys:      0.000 wall:      0.026)
+ LinearSystemFactorization..........:      0.000 (sys:      0.000 wall:      0.000)
+ LinearSystemBackSolve..............:      0.058 (sys:      0.000 wall:      0.058)
+ LinearSystemStructureConverter.....:      0.000 (sys:      0.000 wall:      0.000)
+  LinearSystemStructureConverterInit:      0.000 (sys:      0.000 wall:      0.000)
+Function Evaluations................:      0.244 (sys:      0.000 wall:      0.244)
+ Objective function.................:      0.000 (sys:      0.000 wall:      0.000)
+ Objective function gradient........:      0.003 (sys:      0.000 wall:      0.003)
+ Equality constraints...............:      0.039 (sys:      0.000 wall:      0.039)
+ Inequality constraints.............:      0.000 (sys:      0.000 wall:      0.000)
+ Equality constraint Jacobian.......:      0.028 (sys:      0.000 wall:      0.028)
+ Inequality constraint Jacobian.....:      0.000 (sys:      0.000 wall:      0.000)
+ Lagrangian Hessian.................:      0.174 (sys:      0.000 wall:      0.174)
+
+
+solver=OsilSolver(OSOption("print_timing_statistics", "yes"))
+
